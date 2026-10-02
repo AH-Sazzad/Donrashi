@@ -3,8 +3,8 @@ import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Animated,
+    Modal,
     Platform,
     RefreshControl,
     ScrollView,
@@ -44,24 +44,98 @@ function getMonthRange(): { from: string; to: string } {
 
 function humanDate(rawDate: string): string {
   if (!rawDate) return '';
-  // Strip time portion — treat as local date to avoid UTC shift
   const [y, m, d] = rawDate.split('T')[0].split('-').map(Number);
   const date  = new Date(y, m - 1, d);
   const now   = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const diff  = Math.round((today.getTime() - date.getTime()) / 86400000);
-
   if (diff === 0) return 'Today';
   if (diff === 1) return 'Yesterday';
   if (diff <= 6)  return `${diff} days ago`;
-
   return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// ─── Delete Confirm Modal ─────────────────────────────────────────────────────
+
+function DeleteConfirmModal({ visible, title, walletName, isDark, onCancel, onConfirm }: {
+  visible: boolean;
+  title: string;
+  walletName: string;
+  isDark: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const bg          = isDark ? '#1E1E2E' : '#FFFFFF';
+  const textPrimary = isDark ? '#F1F5F9' : '#1E293B';
+  const textSec     = isDark ? '#94A3B8' : '#64748B';
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={dlStyles.overlay}>
+        <View style={[dlStyles.card, { backgroundColor: bg }]}>
+          {/* Icon */}
+          <View style={dlStyles.iconWrap}>
+            <Ionicons name="trash-outline" size={28} color="#FF6584" />
+          </View>
+
+          <Text style={[dlStyles.heading, { color: textPrimary }]}>Delete Transaction?</Text>
+          <Text style={[dlStyles.body, { color: textSec }]}>
+            <Text style={{ fontWeight: '700', color: textPrimary }}>"{title}"</Text>
+            {' '}will be permanently removed and the full amount will be refunded back to{' '}
+            <Text style={{ fontWeight: '700', color: textPrimary }}>{walletName}</Text>.
+          </Text>
+
+          <View style={dlStyles.actions}>
+            <TouchableOpacity onPress={onCancel} style={[dlStyles.btn, dlStyles.cancelBtn]}>
+              <Text style={[dlStyles.btnText, { color: textSec }]}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onConfirm} style={[dlStyles.btn, dlStyles.deleteBtn]}>
+              <Ionicons name="trash" size={15} color="#FFF" style={{ marginRight: 6 }} />
+              <Text style={[dlStyles.btnText, { color: '#FFF' }]}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const dlStyles = StyleSheet.create({
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center', alignItems: 'center', padding: 32,
+  },
+  card: {
+    width: '100%', borderRadius: 24, padding: 28,
+    alignItems: 'center', gap: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25, shadowRadius: 24, elevation: 16,
+  },
+  iconWrap: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: '#FF658418',
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 4,
+  },
+  heading:  { fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  body:     { fontSize: 14, lineHeight: 22, textAlign: 'center' },
+  actions:  { flexDirection: 'row', gap: 12, marginTop: 8, width: '100%' },
+  btn: {
+    flex: 1, height: 50, borderRadius: 14,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+  },
+  cancelBtn: { backgroundColor: '#F1F5F9' },
+  deleteBtn: { backgroundColor: '#FF6584' },
+  btnText:   { fontSize: 15, fontWeight: '700' },
+});
+
 // ─── Swipeable Transaction Row ────────────────────────────────────────────────
 
-const SWIPE_THRESHOLD   = 60;   // px to trigger action reveal
-const DELETE_THRESHOLD  = 120;  // px to trigger delete zone
+const ROW_HEIGHT     = 76;  // fixed height so overflow:hidden clips cleanly
+const ACTION_WIDTH   = 140; // total width of View+Edit buttons on the right
+const DELETE_WIDTH   = 80;  // width of the delete zone on the left
+const LEFT_THRESHOLD = 80;  // how far right to drag to trigger delete
+const RIGHT_THRESHOLD = 60; // how far left to drag to reveal actions
 
 function SwipeableTransactionRow({
   item, isDark, formatBase, toBase, onDelete,
@@ -75,156 +149,198 @@ function SwipeableTransactionRow({
   const isIncome = item.type === 'income';
   const catColor = item.category?.color ?? '#6C63FF';
   const catIcon  = (item.category?.icon ?? 'pricetag-outline') as React.ComponentProps<typeof Ionicons>['name'];
-  const walletCurrency   = (item.wallet?.currency ?? 'BDT') as SupportedCurrency;
-  const convertedAmount  = toBase(item.amount, walletCurrency);
+  const walletCurrency  = (item.wallet?.currency ?? 'BDT') as SupportedCurrency;
+  const convertedAmount = toBase(item.amount, walletCurrency);
 
-  const translateX   = useRef(new Animated.Value(0)).current;
-  const rowBg        = useRef(new Animated.Value(0)).current;
-  const [swiping, setSwiping] = useState(false);
+  const translateX = useRef(new Animated.Value(0)).current;
+  const [showDelete, setShowDelete] = useState(false);
 
-  const cardBg    = isDark ? '#1E1E2E' : '#FFFFFF';
+  const cardBg        = isDark ? '#1E1E2E' : '#FFFFFF';
   const textPrimary   = isDark ? '#F1F5F9' : '#1E293B';
   const textSecondary = isDark ? '#94A3B8' : '#64748B';
 
   function snapBack() {
     Animated.spring(translateX, {
-      toValue: 0, useNativeDriver: true, bounciness: 6,
-    }).start(() => setSwiping(false));
+      toValue: 0, useNativeDriver: true,
+      tension: 120, friction: 10,
+    }).start();
   }
 
   function handleGestureEvent({ nativeEvent }: { nativeEvent: { translationX: number } }) {
     const tx = nativeEvent.translationX;
-    // Left swipe (negative) → show actions; clamp at -160
-    // Right swipe (positive) → show delete; clamp at +DELETE_THRESHOLD+20
-    const clamped = Math.max(-160, Math.min(DELETE_THRESHOLD + 20, tx));
+    // Right swipe: clamp 0 → DELETE_WIDTH+10
+    // Left swipe:  clamp -ACTION_WIDTH-10 → 0
+    const clamped = Math.max(-(ACTION_WIDTH + 10), Math.min(DELETE_WIDTH + 10, tx));
     translateX.setValue(clamped);
-
-    // Tint background red as user drags right toward delete
-    if (tx > 0) {
-      const progress = Math.min(1, tx / DELETE_THRESHOLD);
-      rowBg.setValue(progress);
-    } else {
-      rowBg.setValue(0);
-    }
   }
 
   function handleStateChange({ nativeEvent }: { nativeEvent: { state: number; translationX: number } }) {
     if (nativeEvent.state !== State.END && nativeEvent.state !== State.CANCELLED) return;
-
     const tx = nativeEvent.translationX;
 
-    if (tx > DELETE_THRESHOLD) {
-      // Confirm delete
-      Alert.alert(
-        'Delete Transaction',
-        `Delete "${item.title}"?\n\nThe full amount will be refunded back to ${item.wallet?.name ?? 'the wallet'}.`,
-        [
-          {
-            text: 'Cancel', style: 'cancel',
-            onPress: () => { rowBg.setValue(0); snapBack(); },
-          },
-          {
-            text: 'Delete', style: 'destructive',
-            onPress: () => {
-              // Slide off screen then delete
-              Animated.timing(translateX, {
-                toValue: 400, duration: 220, useNativeDriver: true,
-              }).start(() => onDelete(item.id));
-            },
-          },
-        ]
-      );
-    } else if (tx < -SWIPE_THRESHOLD) {
+    if (tx > LEFT_THRESHOLD) {
+      // Snap to show delete zone fully, then show confirm modal
+      Animated.spring(translateX, {
+        toValue: DELETE_WIDTH, useNativeDriver: true,
+        tension: 120, friction: 10,
+      }).start(() => setShowDelete(true));
+    } else if (tx < -RIGHT_THRESHOLD) {
       // Snap to reveal action buttons
       Animated.spring(translateX, {
-        toValue: -140, useNativeDriver: true, bounciness: 4,
+        toValue: -ACTION_WIDTH, useNativeDriver: true,
+        tension: 120, friction: 10,
       }).start();
-      setSwiping(true);
     } else {
-      rowBg.setValue(0);
       snapBack();
     }
   }
 
-  const deleteBgColor = rowBg.interpolate({
-    inputRange:  [0, 1],
-    outputRange: ['transparent', '#FF658430'],
+  function handleConfirmDelete() {
+    setShowDelete(false);
+    Animated.timing(translateX, {
+      toValue: 400, duration: 240, useNativeDriver: true,
+    }).start(() => onDelete(item.id));
+  }
+
+  function handleCancelDelete() {
+    setShowDelete(false);
+    snapBack();
+  }
+
+  // Delete zone opacity — only becomes visible as card slides right
+  const deleteOpacity = translateX.interpolate({
+    inputRange:  [0, DELETE_WIDTH],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  // Action buttons opacity — only visible as card slides left
+  const actionOpacity = translateX.interpolate({
+    inputRange:  [-ACTION_WIDTH, 0],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
   });
 
   return (
-    <View style={styles.swipeContainer}>
-      {/* Delete background (right swipe) */}
-      <Animated.View style={[styles.deleteBg, { backgroundColor: deleteBgColor }]}>
-        <Ionicons name="trash" size={22} color="#FF6584" />
-        <Text style={styles.deleteBgText}>Delete</Text>
-      </Animated.View>
+    <>
+      <DeleteConfirmModal
+        visible={showDelete}
+        title={item.title}
+        walletName={item.wallet?.name ?? 'wallet'}
+        isDark={isDark}
+        onCancel={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+      />
 
-      {/* Action buttons (left swipe) */}
-      <View style={styles.actionBg}>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: '#6C63FF' }]}
-          onPress={() => {
-            snapBack();
-            router.push({ pathname: '/transaction-detail', params: { id: String(item.id), mode: 'view' } });
-          }}>
-          <Ionicons name="eye-outline" size={18} color="#FFF" />
-          <Text style={styles.actionBtnText}>View</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: '#43C59E' }]}
-          onPress={() => {
-            snapBack();
-            router.push({ pathname: '/transaction-detail', params: { id: String(item.id), mode: 'edit' } });
-          }}>
-          <Ionicons name="pencil" size={18} color="#FFF" />
-          <Text style={styles.actionBtnText}>Edit</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Fixed-height container — overflow hidden hides everything until swipe */}
+      <View style={[swipeStyles.container, { height: ROW_HEIGHT }]}>
 
-      {/* Main card */}
-      <PanGestureHandler
-        onGestureEvent={handleGestureEvent}
-        onHandlerStateChange={handleStateChange}
-        activeOffsetX={[-10, 10]}
-        failOffsetY={[-15, 15]}>
-        <Animated.View
-          style={[
-            styles.txRow,
+        {/* DELETE zone — left side, hidden until right-swipe */}
+        <Animated.View style={[swipeStyles.deleteBg, { opacity: deleteOpacity, width: DELETE_WIDTH }]}>
+          <Ionicons name="trash" size={20} color="#FF6584" />
+          <Text style={swipeStyles.deleteLabel}>Delete</Text>
+        </Animated.View>
+
+        {/* ACTION buttons — right side, hidden until left-swipe */}
+        <Animated.View style={[swipeStyles.actionBg, { opacity: actionOpacity, width: ACTION_WIDTH }]}>
+          <TouchableOpacity
+            style={[swipeStyles.actionBtn, { backgroundColor: '#6C63FF' }]}
+            onPress={() => {
+              snapBack();
+              router.push({ pathname: '/transaction-detail', params: { id: String(item.id), mode: 'view' } });
+            }}>
+            <Ionicons name="eye-outline" size={19} color="#FFF" />
+            <Text style={swipeStyles.actionLabel}>View</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[swipeStyles.actionBtn, { backgroundColor: '#43C59E' }]}
+            onPress={() => {
+              snapBack();
+              router.push({ pathname: '/transaction-detail', params: { id: String(item.id), mode: 'edit' } });
+            }}>
+            <Ionicons name="pencil" size={19} color="#FFF" />
+            <Text style={swipeStyles.actionLabel}>Edit</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* Main card — slides over the action zones */}
+        <PanGestureHandler
+          onGestureEvent={handleGestureEvent}
+          onHandlerStateChange={handleStateChange}
+          activeOffsetX={[-10, 10]}
+          failOffsetY={[-20, 20]}>
+          <Animated.View style={[
+            swipeStyles.card,
             { backgroundColor: cardBg, transform: [{ translateX }] },
           ]}>
-          {/* Category icon */}
-          <View style={[styles.txIcon, { backgroundColor: catColor + '22' }]}>
-            <Ionicons name={catIcon} size={20} color={catColor} />
-          </View>
-
-          {/* Title + sub */}
-          <View style={styles.txMeta}>
-            <Text style={[styles.txTitle, { color: textPrimary }]} numberOfLines={1}>
-              {item.title}
+            <View style={[swipeStyles.txIcon, { backgroundColor: catColor + '22' }]}>
+              <Ionicons name={catIcon} size={20} color={catColor} />
+            </View>
+            <View style={swipeStyles.txMeta}>
+              <Text style={[swipeStyles.txTitle, { color: textPrimary }]} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Text style={[swipeStyles.txSub, { color: textSecondary }]} numberOfLines={1}>
+                {item.category?.name ?? 'Uncategorized'}
+                {item.wallet?.name ? `  ·  ${item.wallet.name}` : ''}
+              </Text>
+              <Text style={[swipeStyles.txDate, { color: textSecondary }]}>
+                {humanDate(item.transaction_date)}
+              </Text>
+            </View>
+            <Text style={[swipeStyles.txAmount, { color: isIncome ? '#43C59E' : '#FF6584' }]}>
+              {isIncome ? '+' : '-'}{formatBase(convertedAmount)}
             </Text>
-            <Text style={[styles.txSub, { color: textSecondary }]} numberOfLines={1}>
-              {item.category?.name ?? 'Uncategorized'}
-              {item.wallet?.name ? `  ·  ${item.wallet.name}` : ''}
-            </Text>
-            <Text style={[styles.txDate, { color: textSecondary }]}>
-              {humanDate(item.transaction_date)}
-            </Text>
-          </View>
-
-          {/* Amount */}
-          <Text style={[styles.txAmount, { color: isIncome ? '#43C59E' : '#FF6584' }]}>
-            {isIncome ? '+' : '-'}{formatBase(convertedAmount)}
-          </Text>
-        </Animated.View>
-      </PanGestureHandler>
-
-      {/* Tap to close swipe */}
-      {swiping && (
-        <TouchableOpacity style={StyleSheet.absoluteFill} onPress={snapBack} />
-      )}
-    </View>
+          </Animated.View>
+        </PanGestureHandler>
+      </View>
+    </>
   );
 }
+
+const swipeStyles = StyleSheet.create({
+  // Clip everything — nothing visible outside this box
+  container: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+
+  // Delete zone (left side, shown on right-swipe)
+  deleteBg: {
+    position: 'absolute', left: 0, top: 0, bottom: 0,
+    backgroundColor: '#FF658415',
+    flexDirection: 'row', alignItems: 'center',
+    paddingLeft: 20, gap: 8,
+    borderRadius: 16,
+  },
+  deleteLabel: { color: '#FF6584', fontWeight: '700', fontSize: 13 },
+
+  // Action buttons (right side, shown on left-swipe)
+  actionBg: {
+    position: 'absolute', right: 0, top: 0, bottom: 0,
+    flexDirection: 'row', borderRadius: 16, overflow: 'hidden',
+  },
+  actionBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4,
+  },
+  actionLabel: { color: '#FFF', fontSize: 11, fontWeight: '700' },
+
+  // Main card — sits on top, slides to reveal zones beneath
+  card: {
+    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, gap: 12,
+    borderRadius: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  },
+  txIcon: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  txMeta: { flex: 1 },
+  txTitle:  { fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  txSub:    { fontSize: 12, marginBottom: 1 },
+  txDate:   { fontSize: 11 },
+  txAmount: { fontSize: 15, fontWeight: '700' },
+});
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
