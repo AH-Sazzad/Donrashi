@@ -236,8 +236,7 @@ function SwipeableTransactionRow({
 
         {/* DELETE zone — left side, hidden until right-swipe */}
         <Animated.View style={[swipeStyles.deleteBg, { opacity: deleteOpacity, width: DELETE_WIDTH }]}>
-          <Ionicons name="trash" size={20} color="#FF6584" />
-          <Text style={swipeStyles.deleteLabel}>Delete</Text>
+          <Ionicons name="trash" size={22} color="#FF6584" />
         </Animated.View>
 
         {/* ACTION buttons — right side, hidden until left-swipe */}
@@ -309,8 +308,8 @@ const swipeStyles = StyleSheet.create({
   deleteBg: {
     position: 'absolute', left: 0, top: 0, bottom: 0,
     backgroundColor: '#FF658415',
-    flexDirection: 'row', alignItems: 'center',
-    paddingLeft: 20, gap: 8,
+    alignItems: 'center', justifyContent: 'center',
+    paddingLeft: 20,
     borderRadius: 16,
   },
   deleteLabel: { color: '#FF6584', fontWeight: '700', fontSize: 13 },
