@@ -195,7 +195,15 @@ export const transactionsApi = {
 
   update: (
     id: number,
-    body: Partial<{ title: string; amount: number; note: string; transaction_date: string }>
+    body: Partial<{
+      wallet_id: number;
+      category_id: number;
+      type: 'income' | 'expense';
+      title: string;
+      amount: number;
+      note: string;
+      transaction_date: string;
+    }>
   ) =>
     request<{ data: Transaction } | Transaction>(`/transactions/${id}`, {
       method: 'PUT',

@@ -24,6 +24,10 @@ export default function RootLayout() {
             name="transfer"
             options={{ presentation: 'modal', headerShown: false }}
           />
+          <Stack.Screen
+            name="transaction-detail"
+            options={{ presentation: 'modal', headerShown: false }}
+          />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style="auto" />
