@@ -11,7 +11,7 @@ class TransactionController extends Controller
     public function index(Request $request): JsonResponse
     {
         $request->validate([
-            'type'        => ['nullable', 'in:income,expense'],
+            'type'        => ['nullable', 'in:income,expense,transfer'],
             'wallet_id'   => ['nullable', 'integer', 'exists:wallets,id'],
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             'from'        => ['nullable', 'date'],
@@ -37,7 +37,7 @@ class TransactionController extends Controller
         $validated = $request->validate([
             'wallet_id'        => ['required', 'integer', 'exists:wallets,id'],
             'category_id'      => ['required', 'integer', 'exists:categories,id'],
-            'type'             => ['required', 'in:income,expense'],
+            'type'             => ['required', 'in:income,expense,transfer'],
             'amount'           => ['required', 'numeric', 'min:0.01'],
             'title'            => ['required', 'string', 'max:255'],
             'note'             => ['nullable', 'string'],
@@ -73,7 +73,7 @@ class TransactionController extends Controller
         $validated = $request->validate([
             'wallet_id'        => ['sometimes', 'required', 'integer', 'exists:wallets,id'],
             'category_id'      => ['sometimes', 'required', 'integer', 'exists:categories,id'],
-            'type'             => ['sometimes', 'required', 'in:income,expense'],
+            'type'             => ['sometimes', 'required', 'in:income,expense,transfer'],
             'amount'           => ['sometimes', 'required', 'numeric', 'min:0.01'],
             'title'            => ['sometimes', 'required', 'string', 'max:255'],
             'note'             => ['nullable', 'string'],
@@ -136,7 +136,13 @@ class TransactionController extends Controller
     {
         $wallet = $transaction->wallet;
 
-        if ($transaction->type === 'income') {
+        if ($transaction->type === 'income' || $transaction->type === 'transfer') {
+            // For transfer: the credit side uses 'transfer' type and increments
+            // We determine direction by checking if it's a "Transfer from" (income side)
+            // Since transfer debit/credit are handled atomically in TransferController,
+            // individual transaction balance adjustment is skipped for transfer type here.
+            // TransferController handles balances directly — do nothing for 'transfer'.
+            if ($transaction->type === 'transfer') return;
             $wallet->increment('balance', $transaction->amount);
         } else {
             $wallet->decrement('balance', $transaction->amount);
@@ -147,7 +153,9 @@ class TransactionController extends Controller
     {
         $wallet = $transaction->wallet;
 
-        // Reverse: opposite of what was originally applied
+        // Transfer balance is managed by TransferController — skip here
+        if ($transaction->type === 'transfer') return;
+
         if ($transaction->type === 'income') {
             $wallet->decrement('balance', $transaction->amount);
         } else {

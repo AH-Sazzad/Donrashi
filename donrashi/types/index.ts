@@ -32,7 +32,7 @@ export interface Transaction {
   id: number;
   wallet_id: number;
   category_id: number;
-  type: 'income' | 'expense';
+  type: 'income' | 'expense' | 'transfer';
   amount: number;
   title: string;
   note?: string;
@@ -60,7 +60,7 @@ export interface PaginatedResponse<T> {
 }
 
 export interface TransactionFilters {
-  type?: 'income' | 'expense';
+  type?: 'income' | 'expense' | 'transfer';
   wallet_id?: number;
   category_id?: number;
   from?: string;

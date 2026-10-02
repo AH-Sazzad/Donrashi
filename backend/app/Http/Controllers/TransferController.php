@@ -56,12 +56,12 @@ class TransferController extends Controller
         ) {
             $date = $validated['transfer_date'];
 
-            // 1. Debit transaction — expense on source wallet
+            // 1. Debit transaction — transfer type on source wallet
             $debit = Transaction::create([
                 'user_id'          => $user->id,
                 'wallet_id'        => $fromWallet->id,
                 'category_id'      => $transferCategory->id,
-                'type'             => 'expense',
+                'type'             => 'transfer',
                 'amount'           => $fromAmount,
                 'title'            => 'Transfer to ' . $toWallet->name,
                 'note'             => $validated['note'] ?? null,
@@ -69,12 +69,12 @@ class TransferController extends Controller
             ]);
             $fromWallet->decrement('balance', $fromAmount);
 
-            // 2. Credit transaction — income on destination wallet
+            // 2. Credit transaction — transfer type on destination wallet
             $credit = Transaction::create([
                 'user_id'          => $user->id,
                 'wallet_id'        => $toWallet->id,
                 'category_id'      => $transferCategory->id,
-                'type'             => 'income',
+                'type'             => 'transfer',
                 'amount'           => $toAmount,
                 'title'            => 'Transfer from ' . $fromWallet->name,
                 'note'             => $validated['note'] ?? null,

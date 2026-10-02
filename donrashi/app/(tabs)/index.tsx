@@ -146,9 +146,12 @@ function SwipeableTransactionRow({
   toBase: (n: number, c: SupportedCurrency) => number;
   onDelete: (id: number) => void;
 }) {
-  const isIncome = item.type === 'income';
-  const catColor = item.category?.color ?? '#6C63FF';
-  const catIcon  = (item.category?.icon ?? 'pricetag-outline') as React.ComponentProps<typeof Ionicons>['name'];
+  const isIncome   = item.type === 'income';
+  const isTransfer = item.type === 'transfer';
+  const catColor   = isTransfer ? '#6C63FF' : (item.category?.color ?? '#6C63FF');
+  const catIcon    = isTransfer
+    ? 'swap-horizontal-outline' as React.ComponentProps<typeof Ionicons>['name']
+    : (item.category?.icon ?? 'pricetag-outline') as React.ComponentProps<typeof Ionicons>['name'];
   const walletCurrency  = (item.wallet?.currency ?? 'BDT') as SupportedCurrency;
   const convertedAmount = toBase(item.amount, walletCurrency);
 
@@ -286,8 +289,10 @@ function SwipeableTransactionRow({
                 {humanDate(item.transaction_date)}
               </Text>
             </View>
-            <Text style={[swipeStyles.txAmount, { color: isIncome ? '#43C59E' : '#FF6584' }]}>
-              {isIncome ? '+' : '-'}{formatBase(convertedAmount)}
+            <Text style={[swipeStyles.txAmount, {
+              color: isTransfer ? '#6C63FF' : (isIncome ? '#43C59E' : '#FF6584'),
+            }]}>
+              {isTransfer ? '⇄ ' : (isIncome ? '+' : '-')}{formatBase(convertedAmount)}
             </Text>
           </Animated.View>
         </PanGestureHandler>
@@ -394,7 +399,7 @@ export default function HomeScreen() {
     return sum + toBase(w.balance, wCurrency);
   }, 0);
 
-  // Convert transaction amounts to base currency
+  // Convert transaction amounts to base currency — exclude transfers from income/expense
   const monthIncome = transactions
     .filter(t => t.type === 'income')
     .reduce((sum, t) => sum + toBase(t.amount, (t.wallet?.currency ?? 'BDT') as SupportedCurrency), 0);
@@ -403,7 +408,7 @@ export default function HomeScreen() {
     .filter(t => t.type === 'expense')
     .reduce((sum, t) => sum + toBase(t.amount, (t.wallet?.currency ?? 'BDT') as SupportedCurrency), 0);
 
-  // Category breakdown in base currency
+  // Category breakdown — expenses only (no transfers)
   const expenseByCategory: Record<number, number> = {};
   transactions
     .filter(t => t.type === 'expense')
