@@ -3,6 +3,7 @@ import {
   Category,
   Transaction,
   TransactionFilters,
+  Transfer,
   User,
   Wallet,
 } from '@/types';
@@ -203,4 +204,36 @@ export const transactionsApi = {
 
   delete: (id: number) =>
     request<void>(`/transactions/${id}`, { method: 'DELETE' }),
+};
+
+// ─── Transfers ────────────────────────────────────────────────────────────────
+
+function normaliseTransfer(t: Transfer): Transfer {
+  return {
+    ...t,
+    from_amount: Number(t.from_amount),
+    to_amount: Number(t.to_amount),
+    fee: Number(t.fee),
+  };
+}
+
+export const transfersApi = {
+  list: () =>
+    request<Transfer[]>('/transfers').then(res => ({
+      data: (Array.isArray(res) ? res : []).map(normaliseTransfer),
+    })),
+
+  create: (body: {
+    from_wallet_id: number;
+    to_wallet_id: number;
+    from_amount: number;
+    to_amount: number;
+    fee?: number;
+    note?: string;
+    transfer_date: string;
+  }) =>
+    request<Transfer>('/transfers', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }).then(res => ({ data: normaliseTransfer(res) })),
 };

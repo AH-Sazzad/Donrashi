@@ -67,6 +67,25 @@ export interface TransactionFilters {
   to?: string;
 }
 
+export interface Transfer {
+  id: number;
+  user_id: number;
+  from_wallet_id: number;
+  to_wallet_id: number;
+  from_amount: number;
+  to_amount: number;
+  fee: number;
+  debit_transaction_id: number | null;
+  credit_transaction_id: number | null;
+  fee_transaction_id: number | null;
+  note?: string;
+  transfer_date: string;
+  from_wallet?: Wallet;
+  to_wallet?: Wallet;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface CategoryBreakdown {
   category: Category;
   total: number;

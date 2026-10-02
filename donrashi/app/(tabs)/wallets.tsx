@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -267,6 +268,15 @@ function WalletCard({ item, isDark, onEdit, onDelete }: {
           <Text style={styles.currencyTagText}>{item.currency ?? 'BDT'}</Text>
         </View>
       </View>
+
+      {/* Transfer button */}
+      <TouchableOpacity
+        onPress={() => router.push({ pathname: '/transfer', params: { fromWalletId: String(item.id) } })}
+        style={styles.transferBtn}
+        activeOpacity={0.8}>
+        <Ionicons name="swap-horizontal-outline" size={15} color="#FFF" />
+        <Text style={styles.transferBtnText}>Transfer</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -342,9 +352,17 @@ export default function WalletsScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]} edges={['top']}>
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: textPrimary }]}>Wallets</Text>
-        <TouchableOpacity onPress={openCreate} style={styles.addBtn}>
-          <Ionicons name="add" size={22} color="#FFF" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() => router.push('/transfer')}
+            style={[styles.transferHeaderBtn]}>
+            <Ionicons name="swap-horizontal-outline" size={18} color="#6C63FF" />
+            <Text style={styles.transferHeaderBtnText}>Transfer</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={openCreate} style={styles.addBtn}>
+            <Ionicons name="add" size={22} color="#FFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Total card */}
@@ -401,6 +419,13 @@ const styles = StyleSheet.create({
     alignItems: 'center', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12,
   },
   headerTitle: { fontSize: 28, fontWeight: '800' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  transferHeaderBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    borderWidth: 1.5, borderColor: '#6C63FF',
+  },
+  transferHeaderBtnText: { color: '#6C63FF', fontWeight: '700', fontSize: 13 },
   addBtn: {
     width: 40, height: 40, borderRadius: 20, backgroundColor: '#6C63FF',
     justifyContent: 'center', alignItems: 'center',
@@ -437,6 +462,12 @@ const styles = StyleSheet.create({
   walletName: { color: '#FFF', fontSize: 15, fontWeight: '600' },
   currencyTag: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   currencyTagText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+  transferBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 14, paddingVertical: 10, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  transferBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
 
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 10 },
   emptyTitle: { fontSize: 18, fontWeight: '700' },

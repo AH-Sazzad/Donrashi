@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\TransactionController;
+use App\Http\Controllers\TransferController;
 use App\Http\Controllers\WalletController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,4 +27,8 @@ Route::middleware('auth:api')->group(function (): void {
 
     // Transactions
     Route::apiResource('transactions', TransactionController::class);
+
+    // Transfers
+    Route::get('/transfers', [TransferController::class, 'index']);
+    Route::post('/transfers', [TransferController::class, 'store']);
 });

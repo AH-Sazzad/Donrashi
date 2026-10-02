@@ -11,6 +11,8 @@ use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 
 class User extends Authenticatable implements JWTSubject
+
+class User extends Authenticatable implements JWTSubject
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
@@ -52,6 +54,11 @@ class User extends Authenticatable implements JWTSubject
     public function categories(): HasMany
     {
         return $this->hasMany(Category::class);
+    }
+
+    public function transfers(): HasMany
+    {
+        return $this->hasMany(Transfer::class);
     }
 
     public function wallets(): HasMany
