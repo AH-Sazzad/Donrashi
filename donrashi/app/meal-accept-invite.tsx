@@ -160,7 +160,7 @@ export default function MealAcceptInviteScreen() {
           <Text style={[styles.hint, { color: textSec }]}>
             {isCode
               ? 'Ask your mess manager to share the 6-character code from their Settings screen.'
-              : 'The manager invites you by email. They'll share a token for you to paste here.'}
+              : "The manager invites you by email. They'll share a token for you to paste here."}
           </Text>
 
           <TouchableOpacity
