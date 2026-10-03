@@ -321,6 +321,17 @@ export interface MealBookActivityLog {
   created_at?: string;
 }
 
+export interface MealBookInvitation {
+  id: number;
+  meal_book_id: number;
+  invited_by: number;
+  email: string;
+  token: string;
+  status: InvitationStatus;
+  expires_at?: string;
+  created_at?: string;
+}
+
 export interface MealBookDashboard {
   month_year: string;
   meal_book: Pick<MealBook, 'id' | 'name' | 'currency' | 'min_billable_meals'>;

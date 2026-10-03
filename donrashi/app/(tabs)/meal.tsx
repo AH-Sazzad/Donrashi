@@ -81,11 +81,18 @@ export default function MealTab() {
           <Text style={[styles.headerTitle, { color: textPrimary }]}>Mess</Text>
           <Text style={[styles.headerSub, { color: textSecondary }]}>Your meal books</Text>
         </View>
-        <TouchableOpacity
-          onPress={() => router.push('/meal-book-create')}
-          style={styles.addBtn}>
-          <Ionicons name="add" size={22} color="#FFF" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <TouchableOpacity
+            onPress={() => router.push('/meal-accept-invite')}
+            style={[styles.joinBtn]}>
+            <Ionicons name="key-outline" size={18} color="#6C63FF" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/meal-book-create')}
+            style={styles.addBtn}>
+            <Ionicons name="add" size={22} color="#FFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -138,6 +145,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
     shadowColor: '#6C63FF', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35, shadowRadius: 8, elevation: 4,
+  },
+  joinBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1.5, borderColor: '#6C63FF',
   },
 
   list: { paddingHorizontal: 20, paddingBottom: 100, gap: 12 },

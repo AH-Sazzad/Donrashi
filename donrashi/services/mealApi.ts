@@ -21,7 +21,7 @@ import {
 // Re-use the internals from api.ts
 import { getAuthToken } from '@/services/api';
 
-const BASE_URL = 'http://192.168.0.102:8000/api';
+const BASE_URL = 'http://192.168.0.104:8000/api';
 
 async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getAuthToken();

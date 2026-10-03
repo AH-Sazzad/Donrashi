@@ -60,6 +60,22 @@ export default function RootLayout() {
             name="meal-activity"
             options={{ presentation: 'modal', headerShown: false }}
           />
+          <Stack.Screen
+            name="meal-accept-invite"
+            options={{ presentation: 'modal', headerShown: false }}
+          />
+          <Stack.Screen
+            name="meal-utilities"
+            options={{ presentation: 'modal', headerShown: false }}
+          />
+          <Stack.Screen
+            name="meal-members"
+            options={{ presentation: 'modal', headerShown: false }}
+          />
+          <Stack.Screen
+            name="meal-settings"
+            options={{ presentation: 'modal', headerShown: false }}
+          />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style="auto" />
