@@ -45,6 +45,7 @@ class MealBookController extends Controller
             $book = MealBook::create([
                 ...$validated,
                 'created_by' => $request->user()->id,
+                'join_code'  => MealBook::generateJoinCode(),
             ]);
 
             // Creator becomes the first manager
@@ -110,20 +111,59 @@ class MealBookController extends Controller
         return response()->json($mealBook->fresh());
     }
 
-    /** DELETE /meal-books/{mealBook} — archives the book */
+    /** DELETE /meal-books/{mealBook} — permanently deletes the meal book */
     public function destroy(Request $request, MealBook $mealBook): JsonResponse
     {
         $this->requireManager($mealBook, $request->user()->id);
 
-        $mealBook->update(['status' => 'archived']);
-
         $this->log->log(
             $mealBook, $request->user(),
-            'meal_book.archived',
-            "{$request->user()->name} archived the meal book"
+            'meal_book.deleted',
+            "{$request->user()->name} permanently deleted the meal book \"{$mealBook->name}\""
         );
 
-        return response()->json(['message' => 'Meal book archived.']);
+        $mealBook->delete();
+
+        return response()->json(['message' => 'Meal book deleted.']);
+    }
+
+    /** POST /meal-books/join — join a meal book using a 6-char join code */
+    public function joinByCode(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'join_code' => ['required', 'string', 'max:8'],
+        ]);
+
+        $code = strtoupper(trim($validated['join_code']));
+        $book = MealBook::where('join_code', $code)->where('status', 'active')->first();
+
+        if (! $book) {
+            return response()->json(['message' => 'Invalid join code. Check the code and try again.'], 404);
+        }
+
+        $user = $request->user();
+
+        if ($book->isMember($user->id)) {
+            return response()->json(['message' => 'You are already a member of this meal book.'], 422);
+        }
+
+        MealBookMember::create([
+            'meal_book_id' => $book->id,
+            'user_id'      => $user->id,
+            'role'         => MealBookRole::Member,
+            'joined_at'    => now(),
+        ]);
+
+        $this->log->log(
+            $book, $user,
+            'member.joined',
+            "{$user->name} joined via join code"
+        );
+
+        return response()->json([
+            'message'   => 'Joined successfully.',
+            'meal_book' => $book->load(['mealBookMembers.user', 'wallet']),
+        ], 201);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -14,8 +14,18 @@ class MealBook extends Model
     protected $fillable = [
         'name', 'description', 'currency',
         'min_billable_meals', 'bazar_team_size',
-        'status', 'created_by',
+        'status', 'created_by', 'join_code',
     ];
+
+    /** Generate a unique 6-character alphanumeric join code */
+    public static function generateJoinCode(): string
+    {
+        do {
+            $code = strtoupper(substr(str_shuffle('ABCDEFGHJKLMNPQRSTUVWXYZ23456789'), 0, 6));
+        } while (static::where('join_code', $code)->exists());
+
+        return $code;
+    }
 
     protected function casts(): array
     {

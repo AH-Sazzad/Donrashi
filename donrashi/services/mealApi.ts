@@ -70,6 +70,18 @@ export const mealBooksApi = {
   update: (id: number, body: Partial<{ name: string; description: string; min_billable_meals: number; bazar_team_size: number }>) =>
     req<MealBook>(`/meal-books/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 
+  delete: (id: number) =>
+    req<{ message: string }>(`/meal-books/${id}`, { method: 'DELETE' }),
+
+  joinByCode: (joinCode: string) =>
+    req<{ message: string; meal_book: MealBook }>('/meal-books/join', {
+      method: 'POST',
+      body: JSON.stringify({ join_code: joinCode.toUpperCase().trim() }),
+    }),
+
+  delete: (id: number) =>
+    req<void>(`/meal-books/${id}`, { method: 'DELETE' }),
+
   dashboard: (id: number, monthYear?: string) =>
     req<MealBookDashboard>(`/meal-books/${id}/dashboard${monthYear ? `?month_year=${monthYear}` : ''}`),
 };

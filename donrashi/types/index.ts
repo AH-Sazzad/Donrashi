@@ -109,6 +109,7 @@ export interface MealBook {
   currency: string;
   min_billable_meals: number;
   bazar_team_size: number;
+  join_code: string;
   status: 'active' | 'archived';
   created_by: number;
   member_count?: number;

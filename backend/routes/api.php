@@ -52,8 +52,9 @@ Route::middleware('auth:api')->group(function (): void {
     Route::post('/invitations/{token}/accept', [MealBookMemberController::class, 'acceptInvitation']);
 
     Route::prefix('meal-books')->group(function () {
-        Route::get('/',     [MealBookController::class, 'index']);
-        Route::post('/',    [MealBookController::class, 'store']);
+        Route::get('/',       [MealBookController::class, 'index']);
+        Route::post('/',      [MealBookController::class, 'store']);
+        Route::post('/join',  [MealBookController::class, 'joinByCode']);
 
         Route::prefix('{mealBook}')->group(function () {
             Route::get('/',     [MealBookController::class, 'show']);
