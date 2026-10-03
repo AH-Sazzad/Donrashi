@@ -156,6 +156,82 @@ const filterStyles = StyleSheet.create({
   tabText:   { fontSize: 12, fontWeight: '700' },
 });
 
+// ─── Category Filter Chips ────────────────────────────────────────────────────
+
+function CategoryFilterChips({ categories, selectedId, isDark, onChange }: {
+  categories: Category[];
+  selectedId: number | null;
+  isDark: boolean;
+  onChange: (id: number | null) => void;
+}) {
+  if (categories.length === 0) return null;
+  const textSec = isDark ? '#94A3B8' : '#64748B';
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={catChipStyles.row}
+      style={catChipStyles.scroll}>
+
+      {/* "All" chip */}
+      <TouchableOpacity
+        onPress={() => onChange(null)}
+        style={[
+          catChipStyles.chip,
+          { borderColor: '#6C63FF' },
+          selectedId === null && catChipStyles.chipActive,
+          selectedId === null && { backgroundColor: '#6C63FF' },
+        ]}
+        activeOpacity={0.75}>
+        <Ionicons
+          name="apps-outline"
+          size={13}
+          color={selectedId === null ? '#FFF' : '#6C63FF'}
+          style={{ marginRight: 4 }}
+        />
+        <Text style={[catChipStyles.chipText, { color: selectedId === null ? '#FFF' : '#6C63FF' }]}>
+          All
+        </Text>
+      </TouchableOpacity>
+
+      {categories.map(c => {
+        const isActive = selectedId === c.id;
+        const color    = c.color || '#6C63FF';
+        const icon     = (c.icon || 'pricetag-outline') as React.ComponentProps<typeof Ionicons>['name'];
+        return (
+          <TouchableOpacity
+            key={c.id}
+            onPress={() => onChange(isActive ? null : c.id)}
+            style={[
+              catChipStyles.chip,
+              { borderColor: color },
+              isActive && { backgroundColor: color },
+            ]}
+            activeOpacity={0.75}>
+            <Ionicons name={icon} size={13} color={isActive ? '#FFF' : color} style={{ marginRight: 4 }} />
+            <Text style={[catChipStyles.chipText, { color: isActive ? '#FFF' : color }]}>
+              {c.name}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+const catChipStyles = StyleSheet.create({
+  scroll: { marginBottom: 20 },
+  row:    { flexDirection: 'row', gap: 8, paddingHorizontal: 2 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderRadius: 20, borderWidth: 1.5,
+  },
+  chipActive: {},
+  chipText: { fontSize: 12, fontWeight: '700' },
+});
+
 // ─── Summary Strip (income / expense text) ───────────────────────────────────
 
 function SummaryStrip({ income, expense, formatBase, isDark }: {
@@ -478,6 +554,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing]   = useState(false);
   const [filter, setFilter]           = useState<FilterPeriod>('month');
   const [filterLoading, setFilterLoading] = useState(false);
+  const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
 
   // All transactions cache — keyed by period so switching tabs is instant
   const txCache = useRef<Partial<Record<FilterPeriod, Transaction[]>>>({});
@@ -530,8 +607,9 @@ export default function HomeScreen() {
 
   useEffect(() => { loadAll(); }, []);
 
-  // When filter changes, load that period (from cache if available)
+  // When filter changes, load that period (from cache if available) and reset category
   useEffect(() => {
+    setSelectedCatId(null);
     loadTransactions(filter);
   }, [filter, loadTransactions]);
 
@@ -562,26 +640,26 @@ export default function HomeScreen() {
 
   const income = useMemo(() =>
     allTransactions
-      .filter(t => t.type === 'income')
+      .filter(t => t.type === 'income' && (selectedCatId === null || t.category_id === selectedCatId))
       .reduce((sum, t) => sum + toBase(t.amount, (t.wallet?.currency ?? 'BDT') as SupportedCurrency), 0),
-    [allTransactions, toBase]);
+    [allTransactions, toBase, selectedCatId]);
 
   const expense = useMemo(() =>
     allTransactions
-      .filter(t => t.type === 'expense')
+      .filter(t => t.type === 'expense' && (selectedCatId === null || t.category_id === selectedCatId))
       .reduce((sum, t) => sum + toBase(t.amount, (t.wallet?.currency ?? 'BDT') as SupportedCurrency), 0),
-    [allTransactions, toBase]);
+    [allTransactions, toBase, selectedCatId]);
 
   const expenseByCategory = useMemo(() => {
     const map: Record<number, number> = {};
     allTransactions
-      .filter(t => t.type === 'expense')
+      .filter(t => t.type === 'expense' && (selectedCatId === null || t.category_id === selectedCatId))
       .forEach(t => {
         const c = toBase(t.amount, (t.wallet?.currency ?? 'BDT') as SupportedCurrency);
         map[t.category_id] = (map[t.category_id] ?? 0) + c;
       });
     return map;
-  }, [allTransactions, toBase]);
+  }, [allTransactions, toBase, selectedCatId]);
 
   const breakdown: CategoryBreakdown[] = useMemo(() =>
     Object.entries(expenseByCategory)
@@ -600,6 +678,21 @@ export default function HomeScreen() {
       })
       .sort((a, b) => b.total - a.total),
     [expenseByCategory, categories, expense, allTransactions]);
+
+  // Categories that actually appear in this period's transactions
+  const activeCatIds = useMemo(() => new Set(allTransactions.map(t => t.category_id)), [allTransactions]);
+  const periodCategories = useMemo(
+    () => categories.filter(c => activeCatIds.has(c.id)),
+    [categories, activeCatIds],
+  );
+
+  // Filtered transaction list
+  const visibleTransactions = useMemo(() =>
+    selectedCatId === null
+      ? allTransactions
+      : allTransactions.filter(t => t.category_id === selectedCatId),
+    [allTransactions, selectedCatId],
+  );
 
   const pieData: PieSlice[] = breakdown.map((b, i) => ({
     value: b.total,
@@ -673,6 +766,14 @@ export default function HomeScreen() {
           {/* Filter Tabs */}
           <FilterTabs active={filter} isDark={isDark} onChange={setFilter} />
 
+          {/* Category filter chips */}
+          <CategoryFilterChips
+            categories={periodCategories}
+            selectedId={selectedCatId}
+            isDark={isDark}
+            onChange={setSelectedCatId}
+          />
+
           {/* Period label */}
           <View style={styles.periodHeader}>
             <Text style={[styles.periodLabel, { color: textPrimary }]}>{label}</Text>
@@ -729,16 +830,18 @@ export default function HomeScreen() {
             <Text style={[styles.sectionSub, { color: textSecondary }]}>{label}</Text>
           </View>
 
-          {allTransactions.length === 0 ? (
+          {visibleTransactions.length === 0 ? (
             <View style={[styles.section, { backgroundColor: cardBg }]}>
               <View style={styles.emptyState}>
                 <Ionicons name="receipt-outline" size={40} color={textSecondary} />
-                <Text style={[styles.emptyText, { color: textSecondary }]}>No transactions for this period</Text>
+                <Text style={[styles.emptyText, { color: textSecondary }]}>
+                  {selectedCatId ? 'No transactions in this category' : 'No transactions for this period'}
+                </Text>
               </View>
             </View>
           ) : (
             <View style={{ gap: 8, paddingBottom: 100 }}>
-              {allTransactions.map(tx => (
+              {visibleTransactions.map(tx => (
                 <SwipeableTransactionRow
                   key={tx.id} item={tx} isDark={isDark}
                   formatBase={formatBase} toBase={toBase}
