@@ -69,6 +69,20 @@ class User extends Authenticatable implements JWTSubject
         return $this->hasMany(Transaction::class);
     }
 
+    // ── Meal module ───────────────────────────────────────────────────────────
+
+    public function mealBookMemberships(): HasMany
+    {
+        return $this->hasMany(MealBookMember::class);
+    }
+
+    public function mealBooks(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(MealBook::class, 'meal_book_members')
+            ->withPivot(['role', 'joined_at'])
+            ->withTimestamps();
+    }
+
     /**
      * Get the identifier stored in the token's subject claim.
      */

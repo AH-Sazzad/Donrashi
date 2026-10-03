@@ -72,6 +72,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="meal"
+        options={{
+          title: 'Mess',
+          tabBarIcon: ({ color, size }) => (
+            <IconSymbol size={size} name="fork.knife" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="account"
         options={{
           title: 'Account',
