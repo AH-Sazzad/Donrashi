@@ -101,6 +101,19 @@ export const mealMembersApi = {
 
   acceptInvitation: (token: string) =>
     req<{ message: string }>(`/invitations/${token}/accept`, { method: 'POST' }),
+
+  /** Add an offline/accountless ghost member — manager only */
+  addGhost: (mealBookId: number, body: {
+    ghost_name: string;
+    ghost_email?: string;
+    ghost_phone?: string;
+  }) => req<import('@/types').MealBookMember>(`/meal-books/${mealBookId}/members/ghost`, {
+    method: 'POST', body: JSON.stringify(body),
+  }),
+
+  /** Remove a ghost member — manager only */
+  removeGhost: (mealBookId: number, memberId: number) =>
+    req<void>(`/meal-books/${mealBookId}/members/ghost/${memberId}`, { method: 'DELETE' }),
 };
 
 // ─── Wallet & Deposits ────────────────────────────────────────────────────────

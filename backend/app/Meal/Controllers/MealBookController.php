@@ -147,12 +147,26 @@ class MealBookController extends Controller
             return response()->json(['message' => 'You are already a member of this meal book.'], 422);
         }
 
-        MealBookMember::create([
-            'meal_book_id' => $book->id,
-            'user_id'      => $user->id,
-            'role'         => MealBookRole::Member,
-            'joined_at'    => now(),
-        ]);
+        // Check if a ghost member exists with the same email — claim it
+        $ghost = $book->mealBookMembers()
+            ->whereNull('user_id')
+            ->where('ghost_email', $user->email)
+            ->first();
+
+        if ($ghost) {
+            $ghost->update([
+                'user_id'     => $user->id,
+                'ghost_name'  => $ghost->ghost_name, // keep original name
+                'joined_at'   => now(),
+            ]);
+        } else {
+            MealBookMember::create([
+                'meal_book_id' => $book->id,
+                'user_id'      => $user->id,
+                'role'         => MealBookRole::Member,
+                'joined_at'    => now(),
+            ]);
+        }
 
         $this->log->log(
             $book, $user,

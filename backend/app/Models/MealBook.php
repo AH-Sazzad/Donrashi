@@ -124,7 +124,6 @@ class MealBook extends Model
     {
         return $this->mealBookMembers()->where('user_id', $userId)->exists();
     }
-
     public function isManager(int $userId): bool
     {
         return $this->mealBookMembers()

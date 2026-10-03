@@ -123,9 +123,16 @@ export interface MealBook {
 export interface MealBookMember {
   id: number;
   meal_book_id: number;
-  user_id: number;
+  user_id: number | null;
   role: MealBookRole;
   joined_at?: string;
+  /** true when user_id is null — no app account */
+  is_ghost: boolean;
+  display_name: string;
+  ghost_name?: string;
+  ghost_email?: string;
+  ghost_phone?: string;
+  added_by?: number;
   user?: User;
 }
 

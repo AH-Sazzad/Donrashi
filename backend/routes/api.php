@@ -65,9 +65,11 @@ Route::middleware('auth:api')->group(function (): void {
             Route::get('/dashboard', [DashboardController::class, 'show']);
 
             // Members
-            Route::get('/members',          [MealBookMemberController::class, 'index']);
-            Route::delete('/members/{user}', [MealBookMemberController::class, 'destroy']);
-            Route::post('/invitations',      [MealBookMemberController::class, 'invite']);
+            Route::get('/members',                      [MealBookMemberController::class, 'index']);
+            Route::delete('/members/{user}',            [MealBookMemberController::class, 'destroy']);
+            Route::post('/members/ghost',               [MealBookMemberController::class, 'storeGhost']);
+            Route::delete('/members/ghost/{member}',    [MealBookMemberController::class, 'destroyGhost']);
+            Route::post('/invitations',                 [MealBookMemberController::class, 'invite']);
 
             // Wallet
             Route::get('/wallet',             [MealBookWalletController::class, 'show']);
