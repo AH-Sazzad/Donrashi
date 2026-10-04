@@ -9,7 +9,7 @@ class MealRecord extends Model
 {
     protected $fillable = [
         'meal_book_id', 'member_id', 'meal_type_id',
-        'date', 'quantity',
+        'date', 'quantity', 'status',
         'is_manager_edit', 'edit_reason', 'recorded_by',
     ];
 

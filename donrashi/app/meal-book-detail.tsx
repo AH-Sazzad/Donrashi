@@ -317,7 +317,10 @@ export default function MealBookDetailScreen() {
             { label: 'Utilities', icon: 'bulb-outline' as const, color: '#F59E0B', path: '/meal-utilities' },
             { label: 'Members', icon: 'people-outline' as const, color: '#4D96FF', path: '/meal-members' },
             ...(isManager
-              ? [{ label: 'Settings', icon: 'settings-outline' as const, color: '#94A3B8', path: '/meal-settings' }]
+              ? [
+                  { label: 'Control Panel', icon: 'settings-outline' as const, color: '#6C63FF', path: '/meal-control-panel' },
+                  { label: 'Settings', icon: 'construct-outline' as const, color: '#94A3B8', path: '/meal-settings' },
+                ]
               : [{ label: 'Join via Token', icon: 'key-outline' as const, color: '#43C59E', path: '/meal-accept-invite' }]
             ),
           ].map(item => (

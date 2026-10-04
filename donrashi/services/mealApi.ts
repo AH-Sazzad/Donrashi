@@ -169,6 +169,12 @@ export const mealRecordsApi = {
 
   delete: (mealBookId: number, id: number) =>
     req<void>(`/meal-books/${mealBookId}/meals/${id}`, { method: 'DELETE' }),
+
+  approve: (mealBookId: number, id: number) =>
+    req<MealRecord>(`/meal-books/${mealBookId}/meals/${id}/approve`, { method: 'POST' }),
+
+  reject: (mealBookId: number, id: number) =>
+    req<MealRecord>(`/meal-books/${mealBookId}/meals/${id}/reject`, { method: 'POST' }),
 };
 
 // ─── Guest Meals ──────────────────────────────────────────────────────────────
@@ -269,6 +275,9 @@ export const settlementsApi = {
 
   my: (mealBookId: number, monthYear: string) =>
     req<MonthlySettlement>(`/meal-books/${mealBookId}/settlements/my?month_year=${monthYear}`),
+
+  report: (mealBookId: number, monthYear: string) =>
+    req<import('@/types').MealReport>(`/meal-books/${mealBookId}/report?month_year=${monthYear}`),
 };
 
 // ─── Manager Transfer ─────────────────────────────────────────────────────────

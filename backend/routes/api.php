@@ -87,6 +87,8 @@ Route::middleware('auth:api')->group(function (): void {
             Route::get('/meals',             [MealRecordController::class, 'index']);
             Route::post('/meals',            [MealRecordController::class, 'store']);
             Route::delete('/meals/{mealRecord}', [MealRecordController::class, 'destroy']);
+            Route::post('/meals/{mealRecord}/approve', [MealRecordController::class, 'approve']);
+            Route::post('/meals/{mealRecord}/reject',  [MealRecordController::class, 'reject']);
 
             // Guest meals
             Route::get('/guest-meals',           [GuestMealController::class, 'index']);
@@ -121,6 +123,7 @@ Route::middleware('auth:api')->group(function (): void {
             Route::get('/settlements/{settlement}',         [MonthlySettlementController::class, 'show']);
             Route::post('/settlements/{settlement}/calculate', [MonthlySettlementController::class, 'calculate']);
             Route::post('/settlements/{settlement}/close',  [MonthlySettlementController::class, 'close']);
+            Route::get('/report',                           [MonthlySettlementController::class, 'report']);
 
             // Manager transfer
             Route::get('/manager-transfer',                                      [ManagerTransferController::class, 'show']);

@@ -179,6 +179,7 @@ export interface MealRecord {
   meal_type_id: number;
   date: string;
   quantity: number;
+  status: 'pending' | 'approved' | 'rejected';
   is_manager_edit: boolean;
   edit_reason?: string;
   recorded_by: number;
@@ -352,4 +353,25 @@ export interface MealBookDashboard {
   upcoming_bazar: BazarSchedule[];
   recent_expenses: MealBookExpense[];
   pending_deposits: MealBookDeposit[];
+}
+
+export interface MealReport {
+  month_year: string;
+  meal_book: Pick<MealBook, 'id' | 'name' | 'currency' | 'min_billable_meals'>;
+  settlement: MonthlySettlement | null;
+  expenses: MealBookExpense[];
+  meal_summary: {
+    member_id: number;
+    name: string;
+    is_ghost: boolean;
+    actual_meals: number;
+  }[];
+  bazar: BazarSchedule[];
+  totals: {
+    food_expense: number;
+    utility_expense: number;
+    other_expense: number;
+    total_meals: number;
+    meal_rate: number;
+  };
 }

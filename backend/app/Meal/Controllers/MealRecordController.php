@@ -13,7 +13,6 @@ use Illuminate\Http\Request;
 class MealRecordController extends Controller
 {
     public function __construct(private ActivityLogService $log) {}
-
     /** GET /meal-books/{mealBook}/meals?date=&member_id= */
     public function index(Request $request, MealBook $mealBook): JsonResponse
     {
@@ -77,6 +76,10 @@ class MealRecordController extends Controller
             $editReason = $request->input('edit_reason', 'Manager edit after cutoff');
         }
 
+        // Member entries are pending until manager approves.
+        // Manager entries (or entries for others) are auto-approved.
+        $status = ($isManagerEdit || $isForSelf === false) ? 'approved' : 'pending';
+
         $record = MealRecord::updateOrCreate(
             [
                 'meal_book_id' => $mealBook->id,
@@ -86,6 +89,7 @@ class MealRecordController extends Controller
             ],
             [
                 'quantity'        => $data['quantity'] ?? 1,
+                'status'          => $status,
                 'is_manager_edit' => $isManagerEdit,
                 'edit_reason'     => $editReason,
                 'recorded_by'     => $request->user()->id,
@@ -96,13 +100,35 @@ class MealRecordController extends Controller
             $this->log->log(
                 $mealBook, $request->user(),
                 'meal.manager_edit',
-                "{$request->user()->name} edited meal record for member #{$targetId} on {$data['date']}",
+                "{$request->user()->name} edited meal for member #{$targetId} on {$data['date']}",
                 $record,
                 ['quantity' => $data['quantity'], 'reason' => $editReason]
             );
         }
 
         return response()->json($record->load(['member:id,name', 'mealType', 'recorder:id,name']), 201);
+    }
+
+    /** POST /meal-books/{mealBook}/meals/{mealRecord}/approve — manager */
+    public function approve(Request $request, MealBook $mealBook, MealRecord $mealRecord): JsonResponse
+    {
+        if (! $mealBook->isManager($request->user()->id)) abort(403, 'Manager only.');
+        if ($mealRecord->meal_book_id !== $mealBook->id) abort(404);
+
+        $mealRecord->update(['status' => 'approved']);
+
+        return response()->json($mealRecord->fresh()->load(['member:id,name', 'mealType']));
+    }
+
+    /** POST /meal-books/{mealBook}/meals/{mealRecord}/reject — manager */
+    public function reject(Request $request, MealBook $mealBook, MealRecord $mealRecord): JsonResponse
+    {
+        if (! $mealBook->isManager($request->user()->id)) abort(403, 'Manager only.');
+        if ($mealRecord->meal_book_id !== $mealBook->id) abort(404);
+
+        $mealRecord->update(['status' => 'rejected']);
+
+        return response()->json($mealRecord->fresh()->load(['member:id,name', 'mealType']));
     }
 
     /** DELETE /meal-books/{mealBook}/meals/{mealRecord} */

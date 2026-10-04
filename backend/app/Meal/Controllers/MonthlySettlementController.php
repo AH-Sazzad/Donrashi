@@ -38,7 +38,7 @@ class MonthlySettlementController extends Controller
         );
     }
 
-    /** POST /meal-books/{mealBook}/settlements — open a new month */
+    /** POST /meal-books/{mealBook}/settlements */
     public function store(Request $request, MealBook $mealBook): JsonResponse
     {
         $this->requireManager($mealBook, $request->user()->id);
@@ -60,29 +60,25 @@ class MonthlySettlementController extends Controller
         return response()->json($settlement, 201);
     }
 
-    /** POST /meal-books/{mealBook}/settlements/{settlement}/calculate — manager */
+    /** POST /meal-books/{mealBook}/settlements/{settlement}/calculate */
     public function calculate(Request $request, MealBook $mealBook, MonthlySettlement $settlement): JsonResponse
     {
         $this->requireManager($mealBook, $request->user()->id);
         if ($settlement->meal_book_id !== $mealBook->id) abort(404);
 
-        $result = $this->calculator->calculate($settlement, $request->user());
-
-        return response()->json($result);
+        return response()->json($this->calculator->calculate($settlement, $request->user()));
     }
 
-    /** POST /meal-books/{mealBook}/settlements/{settlement}/close — manager */
+    /** POST /meal-books/{mealBook}/settlements/{settlement}/close */
     public function close(Request $request, MealBook $mealBook, MonthlySettlement $settlement): JsonResponse
     {
         $this->requireManager($mealBook, $request->user()->id);
         if ($settlement->meal_book_id !== $mealBook->id) abort(404);
 
-        $result = $this->calculator->close($settlement, $request->user());
-
-        return response()->json($result);
+        return response()->json($this->calculator->close($settlement, $request->user()));
     }
 
-    /** GET /meal-books/{mealBook}/settlements/my — authenticated member's own settlement summary */
+    /** GET /meal-books/{mealBook}/settlements/my */
     public function my(Request $request, MealBook $mealBook): JsonResponse
     {
         $this->requireMember($mealBook, $request->user()->id);
@@ -97,6 +93,66 @@ class MonthlySettlementController extends Controller
         return response()->json($settlement);
     }
 
+    /** GET /meal-books/{mealBook}/report?month_year= */
+    public function report(Request $request, MealBook $mealBook): JsonResponse
+    {
+        $this->requireMember($mealBook, $request->user()->id);
+
+        $monthYear = $request->query('month_year', now()->format('Y-m'));
+        [$start, $end] = $this->monthBounds($monthYear);
+
+        $settlement = MonthlySettlement::where('meal_book_id', $mealBook->id)
+            ->where('month_year', $monthYear)
+            ->with(['memberSettlements.member:id,name'])
+            ->first();
+
+        $expenses = $mealBook->expenses()
+            ->where('month_year', $monthYear)
+            ->with('paidByUser:id,name')
+            ->get();
+
+        $mealRecords = $mealBook->mealRecords()
+            ->with(['member:id,name', 'mealType'])
+            ->where('status', 'approved')
+            ->whereBetween('date', [$start, $end])
+            ->get();
+
+        $members = $mealBook->mealBookMembers()->with('user:id,name')->get();
+        $mealSummary = $members->map(function ($m) use ($mealRecords) {
+            $records = $mealRecords->where('member_id', $m->user_id ?? -1);
+            $total   = $records->sum(fn ($r) => $r->quantity * (float) $r->mealType->weight);
+            return [
+                'member_id'    => $m->id,
+                'name'         => $m->user?->name ?? $m->ghost_name ?? "Member #{$m->id}",
+                'is_ghost'     => $m->isGhost(),
+                'actual_meals' => round($total, 2),
+            ];
+        });
+
+        $bazar = $mealBook->bazarSchedules()
+            ->with('teamMembers.user:id,name')
+            ->whereBetween('date', [$start, $end])
+            ->get();
+
+        return response()->json([
+            'month_year'   => $monthYear,
+            'meal_book'    => $mealBook->only(['id', 'name', 'currency', 'min_billable_meals']),
+            'settlement'   => $settlement,
+            'expenses'     => $expenses,
+            'meal_summary' => $mealSummary,
+            'bazar'        => $bazar,
+            'totals'       => [
+                'food_expense'    => $expenses->where('category', 'food')->sum('amount'),
+                'utility_expense' => $expenses->where('category', 'utilities')->sum('amount'),
+                'other_expense'   => $expenses->where('category', 'other')->sum('amount'),
+                'total_meals'     => round($mealRecords->sum(fn ($r) => $r->quantity * (float) $r->mealType->weight), 2),
+                'meal_rate'       => $settlement?->meal_rate ?? 0,
+            ],
+        ]);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
     private function requireMember(MealBook $book, int $userId): void
     {
         if (! $book->isMember($userId)) abort(403, 'Not a member.');
@@ -105,5 +161,11 @@ class MonthlySettlementController extends Controller
     private function requireManager(MealBook $book, int $userId): void
     {
         if (! $book->isManager($userId)) abort(403, 'Manager only.');
+    }
+
+    private function monthBounds(string $monthYear): array
+    {
+        [$year, $month] = explode('-', $monthYear);
+        return ["{$year}-{$month}-01", date('Y-m-t', strtotime("{$year}-{$month}-01"))];
     }
 }

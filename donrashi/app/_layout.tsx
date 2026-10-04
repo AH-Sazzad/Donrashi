@@ -76,6 +76,22 @@ export default function RootLayout() {
             name="meal-settings"
             options={{ presentation: 'modal', headerShown: false }}
           />
+          <Stack.Screen
+            name="meal-control-panel"
+            options={{ presentation: 'modal', headerShown: false }}
+          />
+          <Stack.Screen
+            name="meal-manager-deposits"
+            options={{ presentation: 'modal', headerShown: false }}
+          />
+          <Stack.Screen
+            name="meal-manager-meals"
+            options={{ presentation: 'modal', headerShown: false }}
+          />
+          <Stack.Screen
+            name="meal-report"
+            options={{ presentation: 'modal', headerShown: false }}
+          />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style="auto" />
