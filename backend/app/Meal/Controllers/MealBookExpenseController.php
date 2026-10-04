@@ -60,6 +60,9 @@ class MealBookExpenseController extends Controller
             'month_year'   => $data['month_year'] ?? now()->format('Y-m'),
         ]);
 
+        // Deduct from shared wallet available balance
+        $mealBook->wallet()->decrement('available_balance', (float) $data['amount']);
+
         $this->log->log(
             $mealBook, $request->user(),
             'expense.created',
@@ -86,6 +89,16 @@ class MealBookExpenseController extends Controller
             'expense_date' => ['sometimes', 'date'],
         ]);
 
+        // If amount changed, adjust wallet balance
+        if (isset($data['amount'])) {
+            $diff = (float) $data['amount'] - (float) $expense->amount;
+            if ($diff > 0) {
+                $mealBook->wallet()->decrement('available_balance', $diff);
+            } elseif ($diff < 0) {
+                $mealBook->wallet()->increment('available_balance', abs($diff));
+            }
+        }
+
         $expense->update($data);
 
         $this->log->log(
@@ -110,6 +123,9 @@ class MealBookExpenseController extends Controller
             "{$request->user()->name} deleted expense #{$expense->id} (৳{$expense->amount})",
             $expense
         );
+
+        // Refund amount back to shared wallet
+        $mealBook->wallet()->increment('available_balance', (float) $expense->amount);
 
         $expense->delete();
 

@@ -13,6 +13,20 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { mealBooksApi, mealMembersApi, mealRecordsApi, mealTypesApi } from '@/services/mealApi';
 import { MealBook, MealBookDashboard, MealBookMember, MealType } from '@/types';
 
+function humanDate(s: string): string {
+  if (!s) return '';
+  const raw = s.split('T')[0];
+  const [y, m, d] = raw.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diff = Math.round((today.getTime() - date.getTime()) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  if (diff <= 6) return `${diff} days ago`;
+  return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+}
+
 function StatCard({ label, value, icon, color, isDark, onPress }: {
   label: string; value: string; icon: React.ComponentProps<typeof Ionicons>['name'];
   color: string; isDark: boolean; onPress?: () => void;
@@ -38,43 +52,130 @@ function QuickMealButtons({ mealBookId, types, userId, isDark, onRecorded }: {
   isDark: boolean; onRecorded: () => void;
 }) {
   const today = new Date().toISOString().split('T')[0];
-  const [loading, setLoading] = useState<number | null>(null);
+  const [loading, setLoading] = useState<number | string | null>(null);
+  const [recorded, setRecorded] = useState<Set<number>>(new Set());
+
+  // Load which meal types are already recorded today
+  useEffect(() => {
+    mealRecordsApi.list(mealBookId, { date: today, member_id: userId })
+      .then(res => {
+        const arr = Array.isArray(res) ? res : [];
+        setRecorded(new Set(arr.map(r => r.meal_type_id)));
+      })
+      .catch(() => {});
+  }, [mealBookId, userId, today]);
 
   async function toggle(type: MealType) {
     setLoading(type.id);
     try {
-      await mealRecordsApi.record(mealBookId, {
-        meal_type_id: type.id,
-        date: today,
-        quantity: 1,
-      });
+      if (recorded.has(type.id)) {
+        // Find and delete the record
+        const all = await mealRecordsApi.list(mealBookId, { date: today, member_id: userId });
+        const arr = Array.isArray(all) ? all : [];
+        const rec = arr.find(r => r.meal_type_id === type.id);
+        if (rec) {
+          await mealRecordsApi.delete(mealBookId, rec.id);
+          setRecorded(prev => { const s = new Set(prev); s.delete(type.id); return s; });
+        }
+      } else {
+        await mealRecordsApi.record(mealBookId, { meal_type_id: type.id, date: today, quantity: 1 });
+        setRecorded(prev => new Set(prev).add(type.id));
+      }
       onRecorded();
     } catch (e: unknown) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed to record meal.');
-    } finally {
-      setLoading(null);
-    }
+    } finally { setLoading(null); }
   }
 
+  async function markAll() {
+    setLoading('all');
+    try {
+      const active = types.filter(t => t.is_active && !t.is_special);
+      await Promise.all(
+        active
+          .filter(t => !recorded.has(t.id))
+          .map(t => mealRecordsApi.record(mealBookId, { meal_type_id: t.id, date: today, quantity: 1 }))
+      );
+      setRecorded(new Set(active.map(t => t.id)));
+      onRecorded();
+    } catch (e: unknown) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed.');
+    } finally { setLoading(null); }
+  }
+
+  const activeMealTypes = types.filter(t => t.is_active && !t.is_special);
+  const allMarked = activeMealTypes.length > 0 && activeMealTypes.every(t => recorded.has(t.id));
   const textSec = isDark ? '#94A3B8' : '#64748B';
 
   return (
-    <View style={styles.quickMealRow}>
-      {types.filter(t => t.is_active && !t.is_special).map(t => (
-        <TouchableOpacity
-          key={t.id}
-          onPress={() => toggle(t)}
-          style={[styles.quickMealBtn, { borderColor: '#6C63FF' }]}
-          activeOpacity={0.75}>
-          {loading === t.id
-            ? <ActivityIndicator size="small" color="#6C63FF" />
-            : <>
-                <Ionicons name="add-circle-outline" size={16} color="#6C63FF" />
-                <Text style={[styles.quickMealText, { color: '#6C63FF' }]}>{t.name}</Text>
-              </>
-          }
-        </TouchableOpacity>
-      ))}
+    <View style={styles.mealSection}>
+      {/* Mark All button */}
+      <TouchableOpacity
+        onPress={markAll}
+        disabled={loading === 'all' || allMarked}
+        style={[
+          styles.markAllBtn,
+          allMarked && { backgroundColor: '#43C59E22', borderColor: '#43C59E' },
+          !allMarked && { backgroundColor: '#6C63FF', borderColor: '#6C63FF' },
+          (loading === 'all') && { opacity: 0.5 },
+        ]}
+        activeOpacity={0.75}>
+        {loading === 'all'
+          ? <ActivityIndicator size="small" color="#FFF" />
+          : <>
+              <Ionicons
+                name={allMarked ? 'checkmark-circle' : 'restaurant'}
+                size={16}
+                color={allMarked ? '#43C59E' : '#FFF'}
+              />
+              <Text style={[styles.markAllText, { color: allMarked ? '#43C59E' : '#FFF' }]}>
+                {allMarked ? 'All meals marked' : 'Mark All (B + L + D)'}
+              </Text>
+            </>
+        }
+      </TouchableOpacity>
+
+      {/* Individual toggles */}
+      <View style={styles.quickMealRow}>
+        {activeMealTypes.map(t => {
+          const isRecorded = recorded.has(t.id);
+          return (
+            <TouchableOpacity
+              key={t.id}
+              onPress={() => toggle(t)}
+              style={[
+                styles.quickMealBtn,
+                isRecorded
+                  ? { backgroundColor: '#43C59E', borderColor: '#43C59E' }
+                  : { borderColor: isDark ? '#3A3A5E' : '#CBD5E1' },
+              ]}
+              activeOpacity={0.75}>
+              {loading === t.id
+                ? <ActivityIndicator size="small" color={isRecorded ? '#FFF' : '#6C63FF'} />
+                : <>
+                    <Ionicons
+                      name={isRecorded ? 'checkmark-circle' : 'add-circle-outline'}
+                      size={15}
+                      color={isRecorded ? '#FFF' : textSec}
+                    />
+                    <Text style={[styles.quickMealText, { color: isRecorded ? '#FFF' : textSec }]}>
+                      {t.name}
+                    </Text>
+                    <Text style={[styles.mealWeight, { color: isRecorded ? 'rgba(255,255,255,0.7)' : textSec }]}>
+                      ×{t.weight}
+                    </Text>
+                  </>
+              }
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {activeMealTypes.length === 0 && (
+        <Text style={[{ fontSize: 12, color: textSec, textAlign: 'center', paddingVertical: 8 }]}>
+          No meal types configured. Go to Settings to add them.
+        </Text>
+      )}
     </View>
   );
 }
@@ -226,8 +327,15 @@ export default function MealBookDetailScreen() {
 
         {/* Quick meal record */}
         <View style={[styles.section, { backgroundColor: cardBg }]}>
-          <Text style={[styles.sectionTitle, { color: textPrimary }]}>Record Today's Meal</Text>
-          <Text style={[styles.sectionSub, { color: textSecondary }]}>Tap to add a meal for today</Text>
+          <View style={styles.sectionRow}>
+            <Text style={[styles.sectionTitle, { color: textPrimary }]}>Today's Meals</Text>
+            <TouchableOpacity onPress={() => router.push({ pathname: '/meal-calendar', params: { id: String(mealBookId) } })}>
+              <Text style={styles.seeAll}>History</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.sectionSub, { color: textSecondary }]}>
+            Tap individual meals or use "Mark All" to record Breakfast, Lunch and Dinner at once
+          </Text>
           <QuickMealButtons
             mealBookId={mealBookId} types={types}
             userId={user?.id ?? 0} isDark={isDark}
@@ -280,7 +388,7 @@ export default function MealBookDetailScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.expName, { color: textPrimary }]}>{e.sub_category ?? e.category}</Text>
-                  <Text style={[styles.expDate, { color: textSecondary }]}>{e.expense_date}</Text>
+                  <Text style={[styles.expDate, { color: textSecondary }]}>{humanDate(e.expense_date)}</Text>
                 </View>
                 <Text style={[styles.expAmount, { color: '#FF6584' }]}>-{sym}{Number(e.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
               </View>
@@ -518,12 +626,19 @@ const styles = StyleSheet.create({
   sectionSub:   { fontSize: 12, marginBottom: 12 },
   seeAll:       { fontSize: 12, color: '#6C63FF', fontWeight: '700' },
 
-  quickMealRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
+  quickMealRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   quickMealBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5,
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, borderWidth: 1.5,
   },
-  quickMealText: { fontSize: 13, fontWeight: '700' },
+  quickMealText: { fontSize: 13, fontWeight: '600' },
+  mealSection:   { gap: 0 },
+  mealWeight:    { fontSize: 10, fontWeight: '600' },
+  markAllBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    paddingVertical: 12, borderRadius: 14, borderWidth: 1.5, marginBottom: 10,
+  },
+  markAllText: { fontSize: 14, fontWeight: '700' },
 
   bazarRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
