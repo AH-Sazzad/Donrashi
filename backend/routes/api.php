@@ -75,6 +75,7 @@ Route::middleware('auth:api')->group(function (): void {
             Route::get('/wallet',             [MealBookWalletController::class, 'show']);
             Route::get('/deposits',           [MealBookWalletController::class, 'deposits']);
             Route::post('/deposits',          [MealBookWalletController::class, 'storeDeposit']);
+            Route::post('/deposits/manager',  [MealBookWalletController::class, 'storeManagerDeposit']);
             Route::post('/deposits/{deposit}/approve', [MealBookWalletController::class, 'approveDeposit']);
             Route::post('/deposits/{deposit}/reject',  [MealBookWalletController::class, 'rejectDeposit']);
 

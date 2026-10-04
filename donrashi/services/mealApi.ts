@@ -137,6 +137,17 @@ export const mealWalletApi = {
     req<MealBookDeposit>(`/meal-books/${mealBookId}/deposits/${depositId}/reject`, {
       method: 'POST', body: JSON.stringify({ reason }),
     }),
+
+  /** Manager records a cash/bKash/etc. payment on behalf of any member (incl. ghost) */
+  managerDeposit: (mealBookId: number, body: {
+    member_id: number;
+    amount: number;
+    payment_method: string;
+    note?: string;
+    month_year?: string;
+  }) => req<MealBookDeposit>(`/meal-books/${mealBookId}/deposits/manager`, {
+    method: 'POST', body: JSON.stringify(body),
+  }),
 };
 
 // ─── Meal Types ───────────────────────────────────────────────────────────────

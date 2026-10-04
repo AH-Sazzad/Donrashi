@@ -94,19 +94,15 @@ export default function MealManagerDepositsScreen() {
     }
     setSaving(true);
     try {
-      // For registered members, use their first wallet if available
-      // For ghost members or cash, we create a direct approved deposit via expense
-      // Strategy: use createDeposit with a fake wallet id = 0 for ghost/cash
-      // The backend will handle this — for ghost members we record as expense category=other
-      // Actually: we add directly as an approved deposit on behalf of the member
-      await mealWalletApi.createDeposit(mealBookId, {
-        from_personal_wallet_id: 1, // manager records on behalf — backend validates ownership
-        amount: Number(amount),
-        note: `${walletType} — recorded by manager${note ? ': ' + note : ''}`,
-        month_year: new Date().toISOString().slice(0, 7),
+      await mealWalletApi.managerDeposit(mealBookId, {
+        member_id:      selectedMember.id,   // MealBookMember.id — works for ghost members too
+        amount:         Number(amount),
+        payment_method: walletType,
+        note:           note.trim() || undefined,
+        month_year:     new Date().toISOString().slice(0, 7),
       });
       setShowForm(false);
-      setAmount(''); setNote('');
+      setAmount(''); setNote(''); setSelectedMember(null);
       load();
     } catch (e: unknown) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed to record deposit.');

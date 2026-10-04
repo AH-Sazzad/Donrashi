@@ -71,6 +71,64 @@ class MealBookWalletController extends Controller
         return response()->json($deposit->load(['member:id,name', 'fromWallet:id,name,currency']), 201);
     }
 
+    /**
+     * POST /meal-books/{mealBook}/deposits/manager — manager records a deposit on behalf of any member.
+     *
+     * Used when manager collects cash/bKash/etc. physically from a member (including ghost members).
+     * No personal wallet deduction — the manager is recording money they already received.
+     * The deposit is created as APPROVED immediately since the manager confirms receipt.
+     */
+    public function storeManagerDeposit(Request $request, MealBook $mealBook): JsonResponse
+    {
+        $this->requireManager($mealBook, $request->user()->id);
+
+        $data = $request->validate([
+            'member_id'    => ['required', 'integer'],
+            'amount'       => ['required', 'numeric', 'min:1'],
+            'payment_method' => ['required', 'string', 'max:50'],
+            'note'         => ['nullable', 'string', 'max:500'],
+            'month_year'   => ['nullable', 'string', 'regex:/^\d{4}-\d{2}$/'],
+        ]);
+
+        // member_id here is MealBookMember.id (not user_id) — supports ghost members
+        $member = $mealBook->mealBookMembers()->findOrFail($data['member_id']);
+
+        $note = $data['payment_method'];
+        if ($data['note']) {
+            $note .= ' — ' . $data['note'];
+        }
+        $note .= ' (recorded by manager)';
+
+        // Create deposit directly as approved — manager has already received the money
+        $deposit = \App\Models\MealBookDeposit::create([
+            'meal_book_id'            => $mealBook->id,
+            'member_id'               => $member->user_id ?? $request->user()->id, // fallback for ghost
+            'from_personal_wallet_id' => $request->user()->wallets()->first()?->id ?? 1,
+            'amount'                  => (float) $data['amount'],
+            'status'                  => 'approved',
+            'note'                    => $note,
+            'approved_by'             => $request->user()->id,
+            'approved_at'             => now(),
+            'month_year'              => $data['month_year'] ?? now()->format('Y-m'),
+        ]);
+
+        // Increase available balance directly (skip pending phase)
+        $mealBook->wallet()->increment('available_balance', (float) $data['amount']);
+
+        // Log it
+        $memberName = $member->user?->name ?? $member->ghost_name ?? "Member #{$member->id}";
+        \App\Models\MealBookActivityLog::create([
+            'meal_book_id' => $mealBook->id,
+            'actor_id'     => $request->user()->id,
+            'event'        => 'deposit.manager_recorded',
+            'description'  => "{$request->user()->name} recorded {$data['payment_method']} deposit of ৳{$data['amount']} for {$memberName}",
+            'subject_type' => 'MealBookDeposit',
+            'subject_id'   => $deposit->id,
+        ]);
+
+        return response()->json($deposit->load(['member:id,name']), 201);
+    }
+
     /** POST /meal-books/{mealBook}/deposits/{deposit}/approve — manager */
     public function approveDeposit(Request $request, MealBook $mealBook, MealBookDeposit $deposit): JsonResponse
     {
