@@ -63,7 +63,9 @@ class SettlementCalculatorService
             ]);
 
             // ── Per-member calculation ────────────────────────────────────────
-            $memberIds = $mealBook->mealBookMembers()->pluck('user_id');
+            $memberIds = $mealBook->mealBookMembers()
+                ->whereNotNull('user_id')   // skip ghost members — they have no user account
+                ->pluck('user_id');
             $memberCount = $memberIds->count();
 
             foreach ($memberIds as $memberId) {

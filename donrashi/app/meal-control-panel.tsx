@@ -108,6 +108,14 @@ export default function MealControlPanelScreen() {
       route: '/meal-utilities',
     },
     {
+      id: 'settlement',
+      label: 'Settlement',
+      desc: 'Calculate meal rate, member bills, due/refund amounts',
+      icon: 'calculator-outline',
+      color: '#8B5CF6',
+      route: '/meal-settlement',
+    },
+    {
       id: 'report',
       label: 'Generate Report',
       desc: 'Monthly summary: meals per member, expenses, settlement preview',

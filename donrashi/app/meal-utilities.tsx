@@ -28,6 +28,13 @@ function toSymbol(currency?: string) {
   return '৳';
 }
 
+function humanDate(s: string): string {
+  if (!s) return '';
+  const [y, m, d] = s.split('T')[0].split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 export default function MealUtilitiesScreen() {
   const { id }      = useLocalSearchParams<{ id: string }>();
   const mealBookId  = Number(id);
@@ -180,7 +187,7 @@ export default function MealUtilitiesScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.expName, { color: textPrimary }]}>{item.sub_category ?? 'Utility'}</Text>
                 <Text style={[styles.expMeta, { color: textSec }]}>
-                  {item.expense_date}
+                  {humanDate(item.expense_date)}
                   {(item as any).paid_by_user?.name ? `  ·  ${(item as any).paid_by_user.name}` : ''}
                 </Text>
               </View>
