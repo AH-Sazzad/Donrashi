@@ -284,6 +284,7 @@ export interface MonthlySettlementMember {
   id: number;
   monthly_settlement_id: number;
   member_id: number;
+  is_meal_active: boolean;
   actual_meals: number;
   billable_meals: number;
   meal_cost: number;
@@ -292,6 +293,12 @@ export interface MonthlySettlementMember {
   total_bill: number;
   total_deposited: number;
   due_amount: number;
+  meal_paid: number;
+  utility_paid: number;
+  meal_due: number;
+  utility_due: number;
+  meal_credit: number;
+  utility_credit: number;
   snapshots?: Record<string, unknown>;
   member?: User;
 }

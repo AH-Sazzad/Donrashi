@@ -9,14 +9,20 @@ class MonthlySettlementMember extends Model
 {
     protected $fillable = [
         'monthly_settlement_id', 'member_id',
+        'is_meal_active',
         'actual_meals', 'billable_meals', 'meal_cost',
         'utility_share', 'other_share', 'total_bill',
-        'total_deposited', 'due_amount', 'snapshots',
+        'total_deposited', 'due_amount',
+        'meal_paid', 'utility_paid',
+        'meal_due', 'utility_due',
+        'meal_credit', 'utility_credit',
+        'snapshots',
     ];
 
     protected function casts(): array
     {
         return [
+            'is_meal_active'  => 'boolean',
             'actual_meals'    => 'decimal:2',
             'billable_meals'  => 'decimal:2',
             'meal_cost'       => 'decimal:2',
@@ -25,6 +31,12 @@ class MonthlySettlementMember extends Model
             'total_bill'      => 'decimal:2',
             'total_deposited' => 'decimal:2',
             'due_amount'      => 'decimal:2',
+            'meal_paid'       => 'decimal:2',
+            'utility_paid'    => 'decimal:2',
+            'meal_due'        => 'decimal:2',
+            'utility_due'     => 'decimal:2',
+            'meal_credit'     => 'decimal:2',
+            'utility_credit'  => 'decimal:2',
             'snapshots'       => 'array',
         ];
     }

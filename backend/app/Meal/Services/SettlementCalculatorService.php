@@ -14,9 +14,22 @@ class SettlementCalculatorService
     public function __construct(private ActivityLogService $log) {}
 
     /**
-     * Calculate (or recalculate) settlement for a given month.
-     * Sets status to 'calculating', computes all values, then 'finalized'.
-     * Throws if the month is already closed.
+     * Calculate settlement with SEPARATE utility and meal dues.
+     *
+     * Business rules:
+     * 1. UTILITY — split equally among ALL active registered members.
+     *    Every member pays utility even if they took zero meals.
+     *
+     * 2. MEAL — food expense divided only among MEAL-ACTIVE members.
+     *    A member deactivated from meal (is_meal_active=false for this month)
+     *    pays zero meal cost. Their utility share is unchanged.
+     *
+     * 3. DEPOSIT ALLOCATION — total deposits are split proportionally:
+     *    utility_paid = deposit × (utility_share / total_bill)
+     *    meal_paid    = deposit × (meal_cost / total_bill)
+     *    If no bill, all deposit goes to utility.
+     *
+     * 4. CREDIT — if paid > share, credit is recorded (not silently absorbed).
      */
     public function calculate(MonthlySettlement $settlement, User $manager): MonthlySettlement
     {
@@ -30,29 +43,148 @@ class SettlementCalculatorService
 
             $settlement->update(['status' => MonthStatus::Calculating]);
 
-            // ── Expenses ─────────────────────────────────────────────────────
-            $expenses = $mealBook->expenses()->where('month_year', $monthYear)->get();
+            // ── Expenses ──────────────────────────────────────────────────────
+            $expenses     = $mealBook->expenses()->where('month_year', $monthYear)->get();
+            $totalFood    = (float) $expenses->where('category', 'food')->sum('amount');
+            $totalUtility = (float) $expenses->where('category', 'utilities')->sum('amount');
+            $totalOther   = (float) $expenses->where('category', 'other')->sum('amount');
 
-            $totalFood      = $expenses->where('category', 'food')->sum('amount');
-            $totalUtility   = $expenses->where('category', 'utilities')->sum('amount');
-            $totalOther     = $expenses->where('category', 'other')->sum('amount');
+            // ── Members ───────────────────────────────────────────────────────
+            // All registered (non-ghost) members = utility contributors
+            $allMemberRows = $mealBook->mealBookMembers()
+                ->whereNotNull('user_id')
+                ->get();
 
-            // ── Meals ────────────────────────────────────────────────────────
-            // All meal records for this month
+            $totalMemberCount = $allMemberRows->count();
+
+            // Meal-active members = those not deactivated for this month
+            $mealActiveMembers = $allMemberRows->filter(
+                fn ($m) => $m->is_meal_active || $m->meal_inactive_month !== $monthYear
+            );
+            $mealMemberCount = $mealActiveMembers->count();
+
+            // ── Meal records (approved only) ──────────────────────────────────
             [$startDate, $endDate] = $this->monthBounds($monthYear);
 
             $mealRecords = $mealBook->mealRecords()
                 ->with('mealType')
+                ->where('status', 'approved')
                 ->whereBetween('date', [$startDate, $endDate])
                 ->get();
 
-            // Total weighted actual meals across all members (used for meal rate)
-            $totalActualMeals = $mealRecords->sum(fn ($r) => $r->quantity * (float) $r->mealType->weight);
+            // Total weighted meals across MEAL-ACTIVE members only
+            $mealActiveMemberIds = $mealActiveMembers->pluck('user_id')->toArray();
+            $totalActualMeals    = $mealRecords
+                ->whereIn('member_id', $mealActiveMemberIds)
+                ->sum(fn ($r) => $r->quantity * (float) $r->mealType->weight);
 
-            // Meal rate = total food expense / total actual weighted meals
+            // Meal rate = food / meals of active participants
             $mealRate = $totalActualMeals > 0
                 ? round($totalFood / $totalActualMeals, 4)
                 : 0;
+
+            // ── Per-member bills ──────────────────────────────────────────────
+            $utilityPerMember = $totalMemberCount > 0
+                ? round($totalUtility / $totalMemberCount, 2)
+                : 0;
+
+            $otherPerMember = $totalMemberCount > 0
+                ? round($totalOther / $totalMemberCount, 2)
+                : 0;
+
+            foreach ($allMemberRows as $memberRow) {
+                $memberId   = $memberRow->user_id;
+                $isMealActive = $memberRow->is_meal_active &&
+                                $memberRow->meal_inactive_month !== $monthYear;
+
+                // Meal calculation
+                $memberMealRecords = $mealRecords->where('member_id', $memberId);
+                $actualMeals = $isMealActive
+                    ? $memberMealRecords->sum(fn ($r) => $r->quantity * (float) $r->mealType->weight)
+                    : 0;
+
+                // Meal cost — only for meal-active members
+                $mealCost = $isMealActive ? round($actualMeals * $mealRate, 2) : 0.0;
+
+                // Utility + other — ALL members pay regardless
+                $utilityShare = $utilityPerMember;
+                $otherShare   = $otherPerMember;
+
+                $totalBill = $mealCost + $utilityShare + $otherShare;
+
+                // Deposits for this member this month
+                $totalDeposited = (float) $mealBook->deposits()
+                    ->where('member_id', $memberId)
+                    ->where('month_year', $monthYear)
+                    ->where('status', 'approved')
+                    ->sum('amount');
+
+                // ── Payment allocation ────────────────────────────────────────
+                // Split deposit proportionally between meal and utility
+                if ($totalBill > 0) {
+                    $mealFraction    = $totalBill > 0 ? $mealCost / $totalBill : 0;
+                    $utilityFraction = $totalBill > 0 ? ($utilityShare + $otherShare) / $totalBill : 1;
+                } else {
+                    $mealFraction    = 0;
+                    $utilityFraction = 1;
+                }
+
+                $mealPaid    = round($totalDeposited * $mealFraction, 2);
+                $utilityPaid = round($totalDeposited * $utilityFraction, 2);
+
+                // Due (positive = owes, negative = overpaid/credit)
+                $mealDue    = round($mealCost - $mealPaid, 2);
+                $utilityDue = round(($utilityShare + $otherShare) - $utilityPaid, 2);
+                $dueAmount  = round($totalBill - $totalDeposited, 2);
+
+                // Credit (overpayment stored separately, not silently absorbed)
+                $mealCredit    = $mealDue < 0    ? abs($mealDue)    : 0;
+                $utilityCredit = $utilityDue < 0 ? abs($utilityDue) : 0;
+                // Clamp dues at 0 — actual due is non-negative; credit tracks the excess
+                $mealDue    = max(0, $mealDue);
+                $utilityDue = max(0, $utilityDue);
+
+                MonthlySettlementMember::updateOrCreate(
+                    ['monthly_settlement_id' => $settlement->id, 'member_id' => $memberId],
+                    [
+                        'is_meal_active'  => $isMealActive,
+                        'actual_meals'    => $actualMeals,
+                        'billable_meals'  => $actualMeals,   // no min-billable in this model
+                        'meal_cost'       => $mealCost,
+                        'utility_share'   => $utilityShare,
+                        'other_share'     => $otherShare,
+                        'total_bill'      => $totalBill,
+                        'total_deposited' => $totalDeposited,
+                        'due_amount'      => $dueAmount,
+                        'meal_paid'       => $mealPaid,
+                        'utility_paid'    => $utilityPaid,
+                        'meal_due'        => $mealDue,
+                        'utility_due'     => $utilityDue,
+                        'meal_credit'     => $mealCredit,
+                        'utility_credit'  => $utilityCredit,
+                        'snapshots'       => [
+                            'is_meal_active'   => $isMealActive,
+                            'actual_meals'     => $actualMeals,
+                            'meal_rate'        => $mealRate,
+                            'meal_cost'        => $mealCost,
+                            'utility_share'    => $utilityShare,
+                            'other_share'      => $otherShare,
+                            'total_bill'       => $totalBill,
+                            'total_deposited'  => $totalDeposited,
+                            'meal_paid'        => $mealPaid,
+                            'utility_paid'     => $utilityPaid,
+                            'meal_due'         => $mealDue,
+                            'utility_due'      => $utilityDue,
+                            'meal_credit'      => $mealCredit,
+                            'utility_credit'   => $utilityCredit,
+                            'due_amount'       => $dueAmount,
+                            'meal_members'     => $mealMemberCount,
+                            'total_members'    => $totalMemberCount,
+                            'calculated_at'    => now()->toISOString(),
+                        ],
+                    ]
+                );
+            }
 
             $settlement->update([
                 'total_food_expense'    => $totalFood,
@@ -60,72 +192,16 @@ class SettlementCalculatorService
                 'total_other_expense'   => $totalOther,
                 'total_actual_meals'    => $totalActualMeals,
                 'meal_rate'             => $mealRate,
-            ]);
-
-            // ── Per-member calculation ────────────────────────────────────────
-            $memberIds = $mealBook->mealBookMembers()
-                ->whereNotNull('user_id')   // skip ghost members — they have no user account
-                ->pluck('user_id');
-            $memberCount = $memberIds->count();
-
-            foreach ($memberIds as $memberId) {
-                $memberRecords = $mealRecords->where('member_id', $memberId);
-
-                $actualMeals = $memberRecords->sum(fn ($r) => $r->quantity * (float) $r->mealType->weight);
-                $billableMeals = max($actualMeals, $mealBook->min_billable_meals);
-                $mealCost = round($billableMeals * $mealRate, 2);
-
-                $utilityShare = $memberCount > 0 ? round($totalUtility / $memberCount, 2) : 0;
-                $otherShare   = $memberCount > 0 ? round($totalOther / $memberCount, 2) : 0;
-                $totalBill    = $mealCost + $utilityShare + $otherShare;
-
-                // Approved deposits this member made this month
-                $totalDeposited = $mealBook->deposits()
-                    ->where('member_id', $memberId)
-                    ->where('month_year', $monthYear)
-                    ->where('status', 'approved')
-                    ->sum('amount');
-
-                $dueAmount = round($totalBill - $totalDeposited, 2);
-
-                MonthlySettlementMember::updateOrCreate(
-                    ['monthly_settlement_id' => $settlement->id, 'member_id' => $memberId],
-                    [
-                        'actual_meals'    => $actualMeals,
-                        'billable_meals'  => $billableMeals,
-                        'meal_cost'       => $mealCost,
-                        'utility_share'   => $utilityShare,
-                        'other_share'     => $otherShare,
-                        'total_bill'      => $totalBill,
-                        'total_deposited' => $totalDeposited,
-                        'due_amount'      => $dueAmount,
-                        'snapshots'       => [
-                            'actual_meals'      => $actualMeals,
-                            'min_billable'      => $mealBook->min_billable_meals,
-                            'billable_meals'    => $billableMeals,
-                            'meal_rate'         => $mealRate,
-                            'meal_cost'         => $mealCost,
-                            'utility_share'     => $utilityShare,
-                            'other_share'       => $otherShare,
-                            'total_bill'        => $totalBill,
-                            'total_deposited'   => $totalDeposited,
-                            'due_amount'        => $dueAmount,
-                            'calculated_at'     => now()->toISOString(),
-                        ],
-                    ]
-                );
-            }
-
-            $settlement->update([
-                'status'       => MonthStatus::Finalized,
-                'finalized_by' => $manager->id,
-                'finalized_at' => now(),
+                'status'                => MonthStatus::Finalized,
+                'finalized_by'          => $manager->id,
+                'finalized_at'          => now(),
             ]);
 
             $this->log->log(
                 $mealBook, $manager,
                 'settlement.calculated',
-                "{$manager->name} calculated settlement for {$monthYear}. Meal rate: ৳{$mealRate}",
+                "{$manager->name} calculated {$monthYear} settlement. " .
+                "Meal rate: ৳{$mealRate}. Active meal members: {$mealMemberCount}/{$totalMemberCount}.",
                 $settlement
             );
 

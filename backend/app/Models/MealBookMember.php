@@ -9,13 +9,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class MealBookMember extends Model
 {
     protected $fillable = ['meal_book_id', 'user_id', 'role', 'joined_at',
-        'ghost_name', 'ghost_email', 'ghost_phone', 'added_by'];
+        'ghost_name', 'ghost_email', 'ghost_phone', 'added_by',
+        'is_meal_active', 'meal_inactive_month'];
 
     protected function casts(): array
     {
         return [
-            'role'      => MealBookRole::class,
-            'joined_at' => 'datetime',
+            'role'            => MealBookRole::class,
+            'joined_at'       => 'datetime',
+            'is_meal_active'  => 'boolean',
         ];
     }
 
@@ -39,8 +41,14 @@ class MealBookMember extends Model
         return $this->role === MealBookRole::Manager;
     }
 
-    /** Ghost members have no user account */
-    public function isGhost(): bool
+    /** Is this member active for meal billing in a specific month? */
+    public function isMealActiveForMonth(string $monthYear): bool
+    {
+        if (! $this->is_meal_active && $this->meal_inactive_month === $monthYear) {
+            return false;
+        }
+        return true;
+    }
     {
         return $this->user_id === null;
     }

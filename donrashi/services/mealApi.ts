@@ -99,8 +99,11 @@ export const mealMembersApi = {
       method: 'POST', body: JSON.stringify({ email }),
     }),
 
-  acceptInvitation: (token: string) =>
-    req<{ message: string }>(`/invitations/${token}/accept`, { method: 'POST' }),
+  /** Toggle meal participation for a month — manager only */
+  toggleMealActive: (mealBookId: number, userId: number, body: { month_year: string; is_meal_active: boolean }) =>
+    req<import('@/types').MealBookMember>(`/meal-books/${mealBookId}/members/${userId}/toggle-meal`, {
+      method: 'POST', body: JSON.stringify(body),
+    }),
 
   /** Add an offline/accountless ghost member — manager only */
   addGhost: (mealBookId: number, body: {

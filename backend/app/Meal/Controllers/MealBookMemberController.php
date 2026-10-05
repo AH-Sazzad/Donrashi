@@ -44,7 +44,37 @@ class MealBookMemberController extends Controller
         );
     }
 
-    /** POST /meal-books/{mealBook}/members/ghost — manager adds an accountless member */
+    /** POST /meal-books/{mealBook}/members/{user}/toggle-meal — manager toggles meal active for a month */
+    public function toggleMealActive(Request $request, MealBook $mealBook, User $user): JsonResponse
+    {
+        $this->requireManager($mealBook, $request->user()->id);
+
+        $data = $request->validate([
+            'month_year'     => ['required', 'string', 'regex:/^\d{4}-\d{2}$/'],
+            'is_meal_active' => ['required', 'boolean'],
+        ]);
+
+        $member = $mealBook->mealBookMembers()->where('user_id', $user->id)->firstOrFail();
+
+        $member->update([
+            'is_meal_active'       => $data['is_meal_active'],
+            'meal_inactive_month'  => $data['is_meal_active'] ? null : $data['month_year'],
+        ]);
+
+        $status = $data['is_meal_active'] ? 'activated' : 'deactivated';
+        $this->log->log(
+            $mealBook, $request->user(),
+            'member.meal_toggled',
+            "{$request->user()->name} {$status} meal for {$user->name} in {$data['month_year']}",
+            $member
+        );
+
+        return response()->json([
+            ...$member->toArray(),
+            'is_ghost'     => $member->isGhost(),
+            'display_name' => $member->display_name,
+        ]);
+    }
     public function storeGhost(Request $request, MealBook $mealBook): JsonResponse
     {
         $this->requireManager($mealBook, $request->user()->id);
